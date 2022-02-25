@@ -5,42 +5,37 @@ import matplotlib.pyplot as plt
 
 
 import lilia
+from k3m import skeletize
 
 def clahe(im):
-    im = np.array(im)
-    clahe = cv2.createCLAHE(clipLimit=2)
+    clahe = cv2.createCLAHE(clipLimit=2, tileGridSize=(10,10))
     return clahe.apply(im)
 
 
 def bilateralFilter(im):
-    im = np.array(im)
-    return cv2.bilateralFilter(im, d=10, sigmaColor=50, sigmaSpace=50)
+    return cv2.bilateralFilter(im, d=10, sigmaColor=400, sigmaSpace=400)
 
 
 def overexpose_and_blur(im):
-    def gammaCorrection(src, gamma=2):
+    def gammaCorrection(src, gamma=2.5):
         invGamma = 1 / gamma
     
         table = [((i / 255) ** invGamma) * 255 for i in range(256)]
         table = np.array(table, np.uint8)
         return cv2.LUT(src, table)
-    im = np.array(im)
     im = gammaCorrection(im)
-    kernel = np.ones((5,5),np.float32)/25
+    kernel = np.ones((4,4),np.float32)/16
     return cv2.filter2D(im,-1,kernel)
 
 
-def quantize(im):
-    im = np.array(im)
+def qtz(im):
     im = Image.fromarray(im)
-    return im.quantize(4)
+    im = im.quantize(colors=4, method=1)
+    im = np.array(im.convert("L"))
+    return im
 
 
 def canny_edges(im):
-    im = np.array(im)
-    im = Image.fromarray(im)
-    im = im.convert("L")
-    im = np.array(im)
     im = cv2.Canny(im, 100, 200)
     return im
 
@@ -48,29 +43,45 @@ def canny_edges(im):
 def plot_image(img, number):
     img = np.array(img)
     fig.add_subplot(1, 2, number)
-    plt.imshow(im, cmap='gray', vmin=0, vmax=255)
+    plt.imshow(img, cmap='gray', vmin=0, vmax=255)
 
 if __name__ == "__main__":
     fig = plt.figure(figsize=(8,6))
-    im = Image.open( "images/lel.jpg")
+    #image = Image.open( "images/Pankraz.png")
+    image = Image.open( "images/Aleks.jpeg")
 
     # resize to be a multiple of 297x210 (size of dinA4 sheet in mm)
-    im = im.resize((210*2,297*2))
-    plot_image(im, 1)
+    image = image.resize((210*3,297*3))
+    plot_image(image, 1)
 
     # first convert to grayscale
-    im = im.convert("L")
+    image = image.convert("L")
+    # convert to numpy array
+    image = np.array(image)
 
-    im = clahe(im)
+    # get original canny
+    canny_orig = canny_edges(image)
 
-    im = bilateralFilter(im)
+    image = clahe(image)
 
-    im = overexpose_and_blur(im)
+    image = bilateralFilter(image)
+    
+    # get bilateral canny
+    canny_bilateral = canny_edges(image)
 
-    im = quantize(im)
+    image = overexpose_and_blur(image)  
+    
+    # get overexpose_and_blur canny
+    canny_overexposed = canny_edges(image)
 
-    im = canny_edges(im)
+    image = qtz(image)
 
-    plot_image(im, 2)
+    image = canny_edges(image)
+
+    # combine cannys
+    image = canny_orig + canny_bilateral + canny_overexposed + image
+    image[np.nonzero(image)] = 255
+
+    plot_image(image, 2)
 
     plt.show()
